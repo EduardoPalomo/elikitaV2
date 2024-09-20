@@ -30,6 +30,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip as RechartsTooltip } from 'recharts'
+import {
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   LineChart,
   Line,
@@ -406,8 +412,84 @@ export default function CompactPatientConsultation() {
         </TabsList>
 
         <TabsContent value="patient-info" className="flex-1 overflow-hidden">
-          {/* Patient Info Content (Same as before) */}
-          {/* ... */}
+          <Card className="h-full flex flex-col bg-white">
+            <CardHeader className="bg-gradient-to-r from-blue-500 to-green-500">
+              <CardTitle className="text-white">Patient Information</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-auto">
+              <ScrollArea className="h-full pr-4">
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-blue-800 mb-2">Personal Information</h3>
+                  <p><strong>Name:</strong> {patientData.name}</p>
+                  <p><strong>Age:</strong> {patientData.age}</p>
+                  <p><strong>Gender:</strong> {patientData.gender}</p>
+                </div>
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-blue-800 mb-2">Medical History</h3>
+                  <ul className="list-disc pl-5">
+                    {patientData.medicalHistory.map((item, index) => (
+                      <li key={index}>
+                        {item.date}: {item.diagnosis} - {item.treatment}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-blue-800 mb-2">Allergies</h3>
+                  <ul className="list-disc pl-5">
+                    {patientData.allergies.map((allergy, index) => (
+                      <li key={index}>{allergy}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-blue-800 mb-2">Current Medications</h3>
+                  <ul className="list-disc pl-5">
+                    {patientData.medications.map((medication, index) => (
+                      <li key={index}>{medication}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-blue-800 mb-2">Vital Signs Over Time</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={patientData.vitalSigns}>
+                      <XAxis dataKey="date" />
+                      <YAxis yAxisId="left" />
+                      <YAxis yAxisId="right" orientation="right" />
+                      <RechartsTooltip />
+                      <legend />
+                      <Line yAxisId="left" type="monotone" dataKey="heartRate" stroke="#8884d8" name="Heart Rate" />
+                      <Line yAxisId="left" type="monotone" dataKey="bloodPressure" stroke="#82ca9d" name="Blood Pressure" />
+                      <Line yAxisId="right" type="monotone" dataKey="temperature" stroke="#ffc658" name="Temperature" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-blue-800 mb-2">Lab Test Results</h3>
+                  <Select onValueChange={(value) => setSelectedLabTest(value as keyof LabResult)}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Select test" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cholesterol">Cholesterol</SelectItem>
+                      <SelectItem value="bloodSugar">Blood Sugar</SelectItem>
+                      <SelectItem value="creatinine">Creatinine</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={patientData.labResults}>
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey={selectedLabTest} stroke="#8884d8" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="consultation" className="flex-1 overflow-hidden">
