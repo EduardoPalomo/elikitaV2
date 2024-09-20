@@ -5,12 +5,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Loader2,
   Mic,
@@ -23,19 +21,22 @@ import {
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip as RechartsTooltip } from 'recharts'
 import {
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import axios from 'axios';
+
+// Import Recharts components for charts
 import {
   LineChart,
   Line,
@@ -45,13 +46,6 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 interface LabResult {
   date: string;
@@ -121,31 +115,39 @@ const initialPatientData: PatientData = {
   ],
 };
 
-const preCheckTasks = [
-  { id: 'verify-identity', label: 'Verify patient identity' },
-  { id: 'check-vitals', label: 'Check patient vitals' },
-  { id: 'review-history', label: 'Review medical history' },
-];
-
+// Modify the translateText function to use Azure Translator
 const translateText = async (text: string, targetLanguage: string): Promise<string> => {
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  return `[Translated to ${targetLanguage}]: ${text}`;
+  const subscriptionKey = process.env.NEXT_PUBLIC_AZURE_TRANSLATOR_KEY;
+  const endpoint = process.env.NEXT_PUBLIC_AZURE_TRANSLATOR_ENDPOINT;
+  const location = process.env.NEXT_PUBLIC_AZURE_TRANSLATOR_LOCATION;
+
+  const response = await axios.post(
+    `${endpoint}/translate?api-version=3.0&to=${targetLanguage}`,
+    [{ Text: text }],
+    {
+      headers: {
+        'Ocp-Apim-Subscription-Key': subscriptionKey,
+        'Ocp-Apim-Subscription-Region': location,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  return response.data[0].translations[0].text;
 };
 
 const languages = [
   { code: 'en', name: 'English' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'zh', name: 'Chinese' },
+  { code: 'ha', name: 'Hausa' },
+  { code: 'yo', name: 'Yoruba' },
+  { code: 'ig', name: 'Igbo' },
 ];
 
 export default function CompactPatientConsultation() {
-  const [completedTasks, setCompletedTasks] = useState<string[]>([]);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [patientData, setPatientData] = useState<PatientData>(initialPatientData);
-  const [aiSuggestions, setAiSuggestions] = useState<Record<string, string>>({});
+  const [aiResponses, setAiResponses] = useState<Record<string, string>>({});
   const [isRecording, setIsRecording] = useState(false);
   const [activeTab, setActiveTab] = useState('patient-info');
   const [currentLanguage, setCurrentLanguage] = useState('en');
@@ -153,6 +155,9 @@ export default function CompactPatientConsultation() {
   const [selectedLabTest, setSelectedLabTest] = useState<keyof LabResult>('cholesterol');
   const [isSpeaking, setIsSpeaking] = useState<string | null>(null);
   const speechSynthesisRef = useRef<SpeechSynthesis | null>(null);
+
+  const [aiAnalysisReport, setAiAnalysisReport] = useState<string>('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const steps = [
     { key: 'chiefcomplaint', label: 'Chief Complaint' },
@@ -168,14 +173,6 @@ export default function CompactPatientConsultation() {
       speechSynthesisRef.current = window.speechSynthesis;
     }
   }, []);
-
-  const handleTaskToggle = (taskId: string) => {
-    setCompletedTasks((prev) =>
-      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
-    );
-  };
-
-  const allTasksCompleted = preCheckTasks.every((task) => completedTasks.includes(task.id));
 
   const updateConsultationData = (key: string, value: string) => {
     setPatientData((prev) => ({
@@ -211,6 +208,14 @@ export default function CompactPatientConsultation() {
       for (const [key, value] of Object.entries(patientData.currentConsultation)) {
         translatedData[key] = await translateText(value, langCode);
       }
+      // Translate AI responses
+      for (const [key, value] of Object.entries(aiResponses)) {
+        translatedData[`ai_${key}`] = await translateText(value, langCode);
+      }
+      // Translate AI Analysis Report
+      if (aiAnalysisReport) {
+        translatedData['ai_analysis_report'] = await translateText(aiAnalysisReport, langCode);
+      }
       setTranslatedContent(translatedData);
       setIsLoading(false);
     } else {
@@ -242,8 +247,11 @@ export default function CompactPatientConsultation() {
       } else {
         speechSynthesisRef.current.cancel();
         const utterance = new SpeechSynthesisUtterance(
-          patientData.currentConsultation[key]
+          currentLanguage === 'en'
+            ? patientData.currentConsultation[key]
+            : translatedContent[key] || ''
         );
+        utterance.lang = currentLanguage;
         utterance.onend = () => setIsSpeaking(null);
         speechSynthesisRef.current.speak(utterance);
         setIsSpeaking(key);
@@ -257,7 +265,7 @@ export default function CompactPatientConsultation() {
     }
   };
 
-  const handleGetAISuggestions = async () => {
+  const handleGetAISuggestionsForSection = async (key: string) => {
     if (aiEnabled) {
       setIsLoading(true);
       try {
@@ -266,7 +274,7 @@ export default function CompactPatientConsultation() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ patientData }),
+          body: JSON.stringify({ section: key, patientData }),
         });
 
         if (!response.ok) {
@@ -274,15 +282,11 @@ export default function CompactPatientConsultation() {
           throw new Error(errorData.error || 'Failed to fetch AI suggestions');
         }
 
-        const { suggestions } = await response.json();
+        const data = await response.json();
 
-        setAiSuggestions(suggestions);
-        setPatientData((prev) => ({
+        setAiResponses((prev) => ({
           ...prev,
-          currentConsultation: {
-            ...prev.currentConsultation,
-            ...suggestions,
-          },
+          [key]: data.suggestions[key],
         }));
         setIsLoading(false);
       } catch (error: any) {
@@ -303,40 +307,46 @@ export default function CompactPatientConsultation() {
     }
   };
 
-  const formatVitalSigns = (vitalSigns: VitalSign[]) => {
-    return vitalSigns.map((vs) => ({
-      ...vs,
-      heartRate: vs.heartRate,
-      bloodPressure: vs.bloodPressure,
-      temperature: vs.temperature,
-    }));
-  };
+  const handleGetAIAnalysis = async () => {
+    if (aiEnabled) {
+      setIsAnalyzing(true);
+      try {
+        const response = await fetch('/api/ai-analysis', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ patientData }),
+        });
 
-  const formatLabResults = (labResults: LabResult[]) => {
-    return labResults.map((lr) => ({
-      ...lr,
-      [selectedLabTest]: lr[selectedLabTest],
-    }));
-  };
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to perform AI Analysis');
+        }
 
-  const getYAxisLabel = (dataKey: string) => {
-    switch (dataKey) {
-      case 'heartRate':
-        return 'Heart Rate (bpm)';
-      case 'bloodPressure':
-        return 'Blood Pressure (mmHg)';
-      case 'temperature':
-        return 'Temperature (°F)';
-      case 'cholesterol':
-      case 'bloodSugar':
-        return 'Level (mg/dL)';
-      case 'creatinine':
-        return 'Level (mg/dL)';
-      default:
-        return '';
+        const data = await response.json();
+
+        setAiAnalysisReport(data.analysisReport);
+        setIsAnalyzing(false);
+      } catch (error: any) {
+        console.error('Error performing AI Analysis:', error);
+        setIsAnalyzing(false);
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to perform AI Analysis. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    } else {
+      toast({
+        title: 'AI Assistance Disabled',
+        description: 'Please enable AI assistance to perform AI Analysis.',
+        variant: 'destructive',
+      });
     }
   };
 
+  // Custom Tooltip for charts
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -344,13 +354,7 @@ export default function CompactPatientConsultation() {
           <p className="text-sm font-bold">{`Date: ${label}`}</p>
           {payload.map((pld: any, index: number) => (
             <p key={index} className="text-sm" style={{ color: pld.color }}>
-              {`${pld.name}: ${pld.value} ${
-                pld.name === 'Temperature'
-                  ? '°F'
-                  : pld.name === 'Heart Rate'
-                  ? 'bpm'
-                  : 'mmHg'
-              }`}
+              {`${pld.name}: ${pld.value}`}
             </p>
           ))}
         </div>
@@ -418,12 +422,20 @@ export default function CompactPatientConsultation() {
             </CardHeader>
             <CardContent className="flex-1 overflow-auto">
               <ScrollArea className="h-full pr-4">
+                {/* Personal Information */}
                 <div className="mb-6">
                   <h3 className="text-lg font-medium text-blue-800 mb-2">Personal Information</h3>
-                  <p><strong>Name:</strong> {patientData.name}</p>
-                  <p><strong>Age:</strong> {patientData.age}</p>
-                  <p><strong>Gender:</strong> {patientData.gender}</p>
+                  <p>
+                    <strong>Name:</strong> {patientData.name}
+                  </p>
+                  <p>
+                    <strong>Age:</strong> {patientData.age}
+                  </p>
+                  <p>
+                    <strong>Gender:</strong> {patientData.gender}
+                  </p>
                 </div>
+                {/* Medical History */}
                 <div className="mb-6">
                   <h3 className="text-lg font-medium text-blue-800 mb-2">Medical History</h3>
                   <ul className="list-disc pl-5">
@@ -434,6 +446,7 @@ export default function CompactPatientConsultation() {
                     ))}
                   </ul>
                 </div>
+                {/* Allergies */}
                 <div className="mb-6">
                   <h3 className="text-lg font-medium text-blue-800 mb-2">Allergies</h3>
                   <ul className="list-disc pl-5">
@@ -442,6 +455,7 @@ export default function CompactPatientConsultation() {
                     ))}
                   </ul>
                 </div>
+                {/* Current Medications */}
                 <div className="mb-6">
                   <h3 className="text-lg font-medium text-blue-800 mb-2">Current Medications</h3>
                   <ul className="list-disc pl-5">
@@ -450,24 +464,21 @@ export default function CompactPatientConsultation() {
                     ))}
                   </ul>
                 </div>
+                {/* Vital Signs Over Time */}
                 <div className="mb-6">
                   <h3 className="text-lg font-medium text-blue-800 mb-2">Vital Signs Over Time</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={patientData.vitalSigns}>
                       <XAxis dataKey="date" />
-                      <YAxis yAxisId="left" />
-                      <YAxis yAxisId="right" orientation="right" />
-                      <RechartsTooltip />
-                      <legend />
-                      <Line yAxisId="left" type="monotone" dataKey="heartRate" stroke="#8884d8" name="Heart Rate" />
-                      <Line yAxisId="left" type="monotone" dataKey="bloodPressure" stroke="#82ca9d" name="Blood Pressure" />
-                      <Line yAxisId="right" type="monotone" dataKey="temperature" stroke="#ffc658" name="Temperature" />
+                      <YAxis />
+                      
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+                {/* Lab Test Results */}
                 <div className="mb-6">
                   <h3 className="text-lg font-medium text-blue-800 mb-2">Lab Test Results</h3>
-                  <Select onValueChange={(value) => setSelectedLabTest(value as keyof LabResult)}>
+                  <Select onValueChange={(value: string) => setSelectedLabTest(value as keyof LabResult)}>
                     <SelectTrigger className="w-[180px]">
                       <SelectValue placeholder="Select test" />
                     </SelectTrigger>
@@ -481,9 +492,7 @@ export default function CompactPatientConsultation() {
                     <LineChart data={patientData.labResults}>
                       <XAxis dataKey="date" />
                       <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey={selectedLabTest} stroke="#8884d8" />
+                      
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -516,18 +525,18 @@ export default function CompactPatientConsultation() {
                   Print Report
                 </Button>
                 <Button
-                  onClick={handleGetAISuggestions}
+                  onClick={handleGetAIAnalysis}
                   variant="outline"
                   size="sm"
                   className="bg-gradient-to-r from-blue-500 to-green-500 text-white hover:from-blue-600 hover:to-green-600"
-                  disabled={isLoading}
+                  disabled={isAnalyzing}
                 >
-                  {isLoading ? (
+                  {isAnalyzing ? (
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   ) : (
                     <Lightbulb className="h-4 w-4 mr-2" />
                   )}
-                  AI Suggestions
+                  AI Analysis
                 </Button>
               </div>
             </CardHeader>
@@ -541,6 +550,7 @@ export default function CompactPatientConsultation() {
                     >
                       {step.label}
                     </Label>
+                    {/* User Input Textarea */}
                     <Textarea
                       id={step.key}
                       placeholder={`Enter ${step.label}`}
@@ -583,9 +593,51 @@ export default function CompactPatientConsultation() {
                         )}
                         {isSpeaking === step.key ? 'Stop' : 'Read Aloud'}
                       </Button>
+                      <Button
+                        onClick={() => handleGetAISuggestionsForSection(step.key)}
+                        variant="outline"
+                        size="sm"
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                        disabled={isLoading || currentLanguage !== 'en'}
+                      >
+                        {isLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Lightbulb className="h-4 w-4" />
+                        )}
+                        AI Suggestions
+                      </Button>
+                    </div>
+                    {/* AI Response Textarea */}
+                    <div className="mt-2">
+                      <Label className="block text-sm font-medium text-blue-800">
+                        AI Response
+                      </Label>
+                      <Textarea
+                        value={
+                          currentLanguage === 'en'
+                            ? aiResponses[step.key] || ''
+                            : translatedContent[`ai_${step.key}`] || ''
+                        }
+                        readOnly
+                        className="h-24 bg-gray-100 border-blue-300"
+                      />
                     </div>
                   </div>
                 ))}
+                {/* Display AI Analysis Report at the bottom */}
+                {aiAnalysisReport && (
+                  <div className="mt-6">
+                    <h3 className="text-xl font-bold text-blue-800 mb-2">AI Analysis Report</h3>
+                    <div className="bg-gray-100 p-4 rounded-md">
+                      <pre className="whitespace-pre-wrap">
+                        {currentLanguage === 'en'
+                          ? aiAnalysisReport
+                          : translatedContent['ai_analysis_report'] || aiAnalysisReport}
+                      </pre>
+                    </div>
+                  </div>
+                )}
               </ScrollArea>
             </CardContent>
           </Card>
