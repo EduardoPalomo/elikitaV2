@@ -19,7 +19,7 @@ const staggerChildren = {
 }
 
 function Header() {
-  console.log("Header component is rendering"); // Add this line
+  console.log("Header component is rendering");
 
   return (
     <motion.header 
@@ -45,11 +45,27 @@ function Header() {
           <motion.a href="#how-it-works" className="text-sky-600 hover:text-sky-800" whileHover={{ scale: 1.1 }}>How It Works</motion.a>
           <motion.a href="#testimonials" className="text-sky-600 hover:text-sky-800" whileHover={{ scale: 1.1 }}>Testimonials</motion.a>
           
-          {/* Move the Chat AI button here */}
+          {/* Chat AI button */}
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link href="/protected/chat" className="flex items-center space-x-2">
               <MessageCircle className="h-5 w-5 text-sky-600" />
               <span className="text-sky-600 hover:text-sky-800">Chat AI</span>
+            </Link>
+          </motion.div>
+
+          {/* New Consultation button */}
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link href="/consultation" className="flex items-center space-x-2">
+              <Stethoscope className="h-5 w-5 text-sky-600" />
+              <span className="text-sky-600 hover:text-sky-800">Consultation</span>
+            </Link>
+          </motion.div>
+
+          {/* New Patients button */}
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link href="/patients" className="flex items-center space-x-2">
+              <Users className="h-5 w-5 text-sky-600" />
+              <span className="text-sky-600 hover:text-sky-800">Patients</span>
             </Link>
           </motion.div>
 
@@ -132,6 +148,12 @@ function Header() {
           </Link>
           <Link href="/protected/chat" className="text-sky-600 hover:text-sky-800">
             <MessageCircle className="h-6 w-6" />
+          </Link>
+          <Link href="/consultation" className="text-sky-600 hover:text-sky-800">
+            <Stethoscope className="h-6 w-6" />
+          </Link>
+          <Link href="/patients" className="text-sky-600 hover:text-sky-800">
+            <Users className="h-6 w-6" />
           </Link>
         </div>
       </div>
