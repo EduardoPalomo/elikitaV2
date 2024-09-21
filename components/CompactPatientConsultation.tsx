@@ -18,6 +18,8 @@ import {
   Volume2Icon,
   Lightbulb,
   Send,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
@@ -159,6 +161,8 @@ export default function CompactPatientConsultation() {
   const [aiAnalysisReport, setAiAnalysisReport] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const [maximizedTextarea, setMaximizedTextarea] = useState<string | null>(null);
+
   const steps = [
     { key: 'chiefcomplaint', label: 'Chief Complaint' },
     { key: 'symptoms', label: 'Symptoms' },
@@ -283,11 +287,16 @@ export default function CompactPatientConsultation() {
         }
 
         const data = await response.json();
+        console.log('Raw API response:', data); // Log the raw response
 
-        setAiResponses((prev) => ({
-          ...prev,
-          [key]: data.suggestions[key],
-        }));
+        if (data.suggestion) {
+          setAiResponses((prev) => ({
+            ...prev,
+            [key]: data.suggestion,
+          }));
+        } else {
+          throw new Error('Unexpected response format');
+        }
         setIsLoading(false);
       } catch (error: any) {
         console.error('Error fetching AI suggestions:', error);
@@ -344,6 +353,10 @@ export default function CompactPatientConsultation() {
         variant: 'destructive',
       });
     }
+  };
+
+  const toggleMaximize = (key: string) => {
+    setMaximizedTextarea(maximizedTextarea === key ? null : key);
   };
 
   // Custom Tooltip for charts
@@ -551,18 +564,34 @@ export default function CompactPatientConsultation() {
                       {step.label}
                     </Label>
                     {/* User Input Textarea */}
-                    <Textarea
-                      id={step.key}
-                      placeholder={`Enter ${step.label}`}
-                      value={
-                        currentLanguage === 'en'
-                          ? patientData.currentConsultation[step.key]
-                          : translatedContent[step.key] || ''
-                      }
-                      onChange={(e) => updateConsultationData(step.key, e.target.value)}
-                      className="h-24 mb-2 bg-white border-blue-300 focus:border-green-500 focus:ring-green-500"
-                      readOnly={currentLanguage !== 'en'}
-                    />
+                    <div className="relative">
+                      <Textarea
+                        id={step.key}
+                        placeholder={`Enter ${step.label}`}
+                        value={
+                          currentLanguage === 'en'
+                            ? patientData.currentConsultation[step.key]
+                            : translatedContent[step.key] || ''
+                        }
+                        onChange={(e) => updateConsultationData(step.key, e.target.value)}
+                        className={`mb-2 bg-white border-blue-300 focus:border-green-500 focus:ring-green-500 ${
+                          maximizedTextarea === step.key ? 'h-96' : 'h-24'
+                        }`}
+                        readOnly={currentLanguage !== 'en'}
+                      />
+                      <Button
+                        onClick={() => toggleMaximize(step.key)}
+                        variant="outline"
+                        size="sm"
+                        className="absolute top-2 right-2 bg-white"
+                      >
+                        {maximizedTextarea === step.key ? (
+                          <Minimize2 className="h-4 w-4" />
+                        ) : (
+                          <Maximize2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
                     <div className="flex space-x-2 mb-2">
                       <Button
                         onClick={() => handleVoiceInput(step.key)}
@@ -613,15 +642,31 @@ export default function CompactPatientConsultation() {
                       <Label className="block text-sm font-medium text-blue-800">
                         AI Response
                       </Label>
-                      <Textarea
-                        value={
-                          currentLanguage === 'en'
-                            ? aiResponses[step.key] || ''
-                            : translatedContent[`ai_${step.key}`] || ''
-                        }
-                        readOnly
-                        className="h-24 bg-gray-100 border-blue-300"
-                      />
+                      <div className="relative">
+                        <Textarea
+                          value={
+                            currentLanguage === 'en'
+                              ? aiResponses[step.key] || ''
+                              : translatedContent[`ai_${step.key}`] || ''
+                          }
+                          readOnly
+                          className={`bg-gray-100 border-blue-300 ${
+                            maximizedTextarea === `ai_${step.key}` ? 'h-96' : 'h-24'
+                          }`}
+                        />
+                        <Button
+                          onClick={() => toggleMaximize(`ai_${step.key}`)}
+                          variant="outline"
+                          size="sm"
+                          className="absolute top-2 right-2 bg-white"
+                        >
+                          {maximizedTextarea === `ai_${step.key}` ? (
+                            <Minimize2 className="h-4 w-4" />
+                          ) : (
+                            <Maximize2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
