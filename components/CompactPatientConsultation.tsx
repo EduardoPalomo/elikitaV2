@@ -273,29 +273,17 @@ export default function CompactPatientConsultation() {
     if (aiEnabled) {
       setIsLoading(true);
       try {
-        const response = await fetch('/api/get-ai-suggestions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ section: key, patientData }),
-        });
+        const response = await axios.post('/api/get-ai-suggestions', { section: key, patientData });
+        
+        console.log("API Response:", response.data);
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch AI suggestions');
-        }
-
-        const data = await response.json();
-        console.log('Raw API response:', data); // Log the raw response
-
-        if (data.suggestion) {
+        if (response.data && response.data.suggestions) {
           setAiResponses((prev) => ({
             ...prev,
-            [key]: data.suggestion,
+            [key]: response.data.suggestions,
           }));
         } else {
-          throw new Error('Unexpected response format');
+          throw new Error("Unexpected response format");
         }
         setIsLoading(false);
       } catch (error: any) {

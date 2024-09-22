@@ -1,70 +1,71 @@
-// app/api/get-ai-suggestions/route.ts
-
-import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { NextResponse } from "next/server";
+import { AzureOpenAI } from "openai";
 
 export async function POST(request: Request) {
   try {
-    const { section, patientData } = await request.json();
+    const body = await request.json();
+    console.log("Received body:", body);
 
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    if (!openaiApiKey) {
-      return NextResponse.json(
-        { error: 'OpenAI API key is not configured.' },
-        { status: 500 }
-      );
+    if (!body || typeof body !== 'object') {
+      throw new Error("Invalid request body");
     }
 
-    const openai = new OpenAI();
+    let { section, patientData } = body;
+    let prompt = `Provide suggestions for the ${section} section based on the following patient data: ${JSON.stringify(patientData)}`;
 
-    let prompt = '';
+    console.log("Extracted prompt:", prompt);
 
-    // Generate prompts based on the section and patient data
-    if (section === 'examination') {
-      prompt = `Based on the patient's symptoms: "${patientData.currentConsultation.symptoms}", generate an extensive list of examination points to check, similar to the following example, but specific to the symptoms provided:
-
-1. General appearance:
-2. Obvious congenital abnormalities e.g (mongolism, spina bifida, microcephaly, harelip)
-3. Crying, active, limp, floppy.
-...
-[continue the list as per the example]`;
-    } else if (section === 'diagnosis') {
-      prompt = `Based on the patient's complaint: "${patientData.currentConsultation.chiefcomplaint}" and symptoms: "${patientData.currentConsultation.symptoms}", generate a list of suggested questions to improve the diagnosis, similar to the following example, but adapted to the patient's inputs:
-
-1. What is the matter with the baby's eyes?
-2. How long has the baby had the problem?
-...
-[continue the list as per the example]`;
-    } else if (section === 'treatmentplan') {
-      prompt = `Based on the diagnosis: "${patientData.currentConsultation.diagnosis}", generate a treatment plan including specific information and medication doses, similar to the following example:
-
-1. Wash hands with soap and water before and after treatment.
-2. Gently clean eyes with cotton wool soaked in cooled boiled water 6-8 times a day
-...
-[continue the list as per the example]`;
-    } else {
-      prompt = `Provide AI suggestions for the "${section}" section based on the patient's inputs.`;
+    if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+      throw new Error("Prompt is empty or not a valid string");
     }
 
-    if (prompt) {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-      });
+    prompt = prompt.trim();
 
-      const suggestion = completion.choices[0]?.message?.content?.trim() ?? '';
+    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+    const apiKey = process.env.AZURE_OPENAI_API_KEY;
+    const deploymentId = process.env.AZURE_OPENAI_DEPLOYMENT_ID;
 
-      return NextResponse.json({ suggestion });
-    } else {
-      return NextResponse.json(
-        { error: 'No prompt generated for this section.' },
-        { status: 400 }
-      );
+    if (!endpoint || !apiKey || !deploymentId) {
+      throw new Error("Missing required environment variables");
     }
+
+    const client = new AzureOpenAI({
+      apiKey,
+      endpoint,
+      deployment: deploymentId,
+      apiVersion: "2023-03-15-preview",
+    });
+
+    const messages = [
+      { role: "system", content: "You are a helpful medical assistant." },
+      { role: "user", content: prompt },
+    ];
+
+    console.log("Messages to be sent:", messages);
+
+    const response = await client.chat.completions.create({
+      model: deploymentId,
+      messages: messages.map((msg) => ({
+        role: msg.role as 'system' | 'user' | 'assistant',
+        content: msg.content,
+      })),
+      max_tokens: 800,
+      temperature: 0.7,
+      top_p: 0.95,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+    });
+
+    const suggestions = response.choices[0].message.content;
+
+    return NextResponse.json({ suggestions });
   } catch (error: any) {
-    console.error('Error in get-ai-suggestions:', error);
+    console.error('Detailed error:', error);
     return NextResponse.json(
-      { error: error.message || 'An error occurred.' },
+      {
+        error: error.message || 'An error occurred while processing your request.',
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }
