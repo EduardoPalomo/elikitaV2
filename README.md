@@ -4,7 +4,7 @@ AI-Powered Healthcare for Rural Africa
 
 ## Project Overview
 
-Elikita is an innovative project aimed at empowering healthcare practitioners in rural Africa with AI-powered solutions. This application leverages Next.js 14 and Supabase to provide a robust, scalable platform for improving healthcare delivery in underserved areas.
+Elikita is an innovative project aimed at empowering healthcare practitioners in rural Africa with AI-powered solutions. This application leverages Next.js 14, Supabase and Azure technologies to provide a robust, scalable platform for improving healthcare delivery in underserved areas.
 
 ## Folder Structure
 
